@@ -1,0 +1,6 @@
+@CAPSI.Sante_HostAddress = http://localhost:5014
+
+GET {{CAPSI.Sante_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
