@@ -7,11 +7,9 @@ using System.Threading.Tasks;
 
 namespace CAPSI.Sante.Application.DTOs.Patient
 {
-    public class UpdatePatientDto : CreatePatientDto
+    public class DeletePatientPhotoDto
     {
-        [Required]
+        [Required(ErrorMessage = "L'ID du patient est requis")]
         public Guid Id { get; set; }
-
-         
     }
 }

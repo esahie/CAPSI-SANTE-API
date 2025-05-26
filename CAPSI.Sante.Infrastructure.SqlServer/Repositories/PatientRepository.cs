@@ -46,7 +46,8 @@ namespace CAPSI.Sante.Infrastructure.SqlServer.Repositories
                         patient.Adresse,
                         patient.CodePostal,
                         patient.Ville,
-                        patient.GroupeSanguin
+                        patient.GroupeSanguin,
+                        patient.PhotoUrl // Nouvelle propriété
                     },
                     commandType: CommandType.StoredProcedure
                 );
@@ -86,8 +87,9 @@ namespace CAPSI.Sante.Infrastructure.SqlServer.Repositories
             {
                 using var conn = _connection.CreateConnection();
                 return await conn.QueryFirstOrDefaultAsync<Patient>(
-                    "SELECT * FROM Patients WHERE NumeroAssuranceMaladie = @NumeroAssurance",
-                    new { NumeroAssurance = numeroAssurance }
+                    "sp_GetPatientByNumeroAssurance",
+                    new { NumeroAssurance = numeroAssurance },
+                    commandType: CommandType.StoredProcedure
                 );
             }
             catch (Exception ex)
@@ -97,13 +99,16 @@ namespace CAPSI.Sante.Infrastructure.SqlServer.Repositories
             }
         }
 
+
         public async Task<IEnumerable<Patient>> GetAllAsync()
         {
             try
             {
                 using var conn = _connection.CreateConnection();
                 return await conn.QueryAsync<Patient>(
-                    "SELECT * FROM Patients ORDER BY Nom, Prenom"
+                    "sp_GetPatients",
+                    new { IncludeInactive = false },
+                    commandType: CommandType.StoredProcedure
                 );
             }
             catch (Exception ex)
@@ -136,6 +141,7 @@ namespace CAPSI.Sante.Infrastructure.SqlServer.Repositories
                         patient.CodePostal,
                         patient.Ville,
                         patient.GroupeSanguin,
+                        patient.PhotoUrl, // Nouvelle propriété
                         UpdatedAt = DateTime.UtcNow
                     },
                     commandType: CommandType.StoredProcedure
@@ -186,15 +192,10 @@ namespace CAPSI.Sante.Infrastructure.SqlServer.Repositories
             try
             {
                 using var conn = _connection.CreateConnection();
-                return await conn.QueryAsync<Patient>(@"
-                SELECT * FROM Patients 
-                WHERE Nom LIKE @Search 
-                OR Prenom LIKE @Search 
-                OR NumeroAssuranceMaladie LIKE @Search
-                OR Telephone LIKE @Search
-                OR Email LIKE @Search
-                ORDER BY Nom, Prenom",
-                    new { Search = $"%{searchTerm}%" }
+                return await conn.QueryAsync<Patient>(
+                    "sp_SearchPatients",
+                    new { SearchTerm = searchTerm },
+                    commandType: CommandType.StoredProcedure
                 );
             }
             catch (Exception ex)
@@ -223,24 +224,22 @@ namespace CAPSI.Sante.Infrastructure.SqlServer.Repositories
             }
         }
 
-       
+
         public async Task<bool> IsNumeroAssuranceUnique(string numeroAssurance, Guid? excludeId = null)
         {
             try
             {
                 using var conn = _connection.CreateConnection();
-                var query = "SELECT COUNT(1) FROM Patients WHERE NumeroAssuranceMaladie = @NumeroAssurance";
-                var parameters = new DynamicParameters();
-                parameters.Add("NumeroAssurance", numeroAssurance);
-
-                if (excludeId.HasValue)
-                {
-                    query += " AND Id != @ExcludeId";
-                    parameters.Add("ExcludeId", excludeId.Value);
-                }
-
-                var count = await conn.ExecuteScalarAsync<int>(query, parameters);
-                return count == 0;
+                var result = await conn.QuerySingleAsync<int>(
+                    "sp_CheckNumeroAssuranceUnique",
+                    new
+                    {
+                        NumeroAssurance = numeroAssurance,
+                        ExcludeId = excludeId
+                    },
+                    commandType: CommandType.StoredProcedure
+                );
+                return result == 0; // 0 = unique, >0 = existe déjà
             }
             catch (Exception ex)
             {
@@ -337,28 +336,17 @@ namespace CAPSI.Sante.Infrastructure.SqlServer.Repositories
             }
         }
 
-        
+
         public async Task<Patient> GetByIdWithDossierAsync(Guid id)
         {
             try
             {
                 using var conn = _connection.CreateConnection();
-
-                // Récupérer le patient
-                var patient = await GetByIdAsync(id);
-
-                if (patient != null)
-                {
-                    // Récupérer le dossier médical associé
-                    var dossier = await conn.QueryFirstOrDefaultAsync<DossierMedical>(
-                        "SELECT * FROM DossiersMedicaux WHERE PatientId = @PatientId",
-                        new { PatientId = id }
-                    );
-
-                    patient.DossierMedical = dossier;
-                }
-
-                return patient;
+                return await conn.QueryFirstOrDefaultAsync<Patient>(
+                    "sp_GetPatientWithDossier",
+                    new { Id = id },
+                    commandType: CommandType.StoredProcedure
+                );
             }
             catch (Exception ex)
             {
@@ -366,5 +354,354 @@ namespace CAPSI.Sante.Infrastructure.SqlServer.Repositories
                 throw;
             }
         }
+        public async Task<bool> UpdatePhotoAsync(Guid patientId, string photoUrl)
+        {
+            try
+            {
+                using var conn = _connection.CreateConnection();
+                var rowsAffected = await conn.ExecuteAsync(
+                    "sp_UpdatePatientPhoto",
+                    new { PatientId = patientId, PhotoUrl = photoUrl },
+                    commandType: CommandType.StoredProcedure
+                );
+
+                if (rowsAffected == 0)
+                    throw new NotFoundException($"Patient avec ID {patientId} non trouvé");
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la mise à jour de la photo du patient {PatientId}", patientId);
+                throw;
+            }
+        }
+
+        // Méthode pour supprimer la photo d'un patient
+        public async Task<bool> DeletePhotoAsync(Guid patientId)
+        {
+            try
+            {
+                using var conn = _connection.CreateConnection();
+                var rowsAffected = await conn.ExecuteAsync(
+                    "sp_DeletePatientPhoto",
+                    new { PatientId = patientId },
+                    commandType: CommandType.StoredProcedure
+                );
+
+                if (rowsAffected == 0)
+                    throw new NotFoundException($"Patient avec ID {patientId} non trouvé");
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la suppression de la photo du patient {PatientId}", patientId);
+                throw;
+            }
+        }
+
+        // Méthode pour récupérer uniquement l'URL de la photo
+        public async Task<string> GetPhotoUrlAsync(Guid patientId)
+        {
+            try
+            {
+                using var conn = _connection.CreateConnection();
+                return await conn.QueryFirstOrDefaultAsync<string>(
+                    "sp_GetPatientPhotoUrl",
+                    new { PatientId = patientId },
+                    commandType: CommandType.StoredProcedure
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la récupération de la photo du patient {PatientId}", patientId);
+                throw;
+            }
+        }
+
+        // Méthode pour vérifier unicité email
+        public async Task<bool> IsEmailUniqueAsync(string email, Guid? excludeId = null)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(email))
+                    return true; // Email vide est considéré comme unique
+
+                using var conn = _connection.CreateConnection();
+                var count = await conn.QuerySingleAsync<int>(
+                    "sp_CheckEmailUnique",
+                    new
+                    {
+                        Email = email,
+                        ExcludeId = excludeId
+                    },
+                    commandType: CommandType.StoredProcedure
+                );
+                return count == 0;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la vérification de l'unicité de l'email {Email}", email);
+                throw;
+            }
+        }
+
+        // Méthode pour vérifier unicité téléphone
+        public async Task<bool> IsTelephoneUniqueAsync(string telephone, Guid? excludeId = null)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(telephone))
+                    return true; // Téléphone vide est considéré comme unique
+
+                using var conn = _connection.CreateConnection();
+                var count = await conn.QuerySingleAsync<int>(
+                    "sp_CheckTelephoneUnique",
+                    new
+                    {
+                        Telephone = telephone,
+                        ExcludeId = excludeId
+                    },
+                    commandType: CommandType.StoredProcedure
+                );
+                return count == 0;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la vérification de l'unicité du téléphone {Telephone}", telephone);
+                throw;
+            }
+        }
+
+        // Méthode pour vérifier unicité UserId
+        public async Task<bool> IsUserIdUniqueAsync(Guid? userId, Guid? excludeId = null)
+        {
+            try
+            {
+                if (!userId.HasValue)
+                    return true; // UserId null est considéré comme unique
+
+                using var conn = _connection.CreateConnection();
+                var count = await conn.QuerySingleAsync<int>(
+                    "sp_CheckUserIdUnique",
+                    new
+                    {
+                        UserId = userId.Value,
+                        ExcludeId = excludeId
+                    },
+                    commandType: CommandType.StoredProcedure
+                );
+                return count == 0;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la vérification de l'unicité du UserId {UserId}", userId);
+                throw;
+            }
+        }
+
+        // Méthode pour récupérer patient par email
+        public async Task<Patient> GetByEmailAsync(string email)
+        {
+            try
+            {
+                using var conn = _connection.CreateConnection();
+                return await conn.QueryFirstOrDefaultAsync<Patient>(
+                    "sp_GetPatientByEmail",
+                    new { Email = email },
+                    commandType: CommandType.StoredProcedure
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la récupération du patient par email {Email}", email);
+                throw;
+            }
+        }
+
+        // Méthode pour récupérer patient par téléphone
+        public async Task<Patient> GetByTelephoneAsync(string telephone)
+        {
+            try
+            {
+                using var conn = _connection.CreateConnection();
+                return await conn.QueryFirstOrDefaultAsync<Patient>(
+                    "sp_GetPatientByTelephone",
+                    new { Telephone = telephone },
+                    commandType: CommandType.StoredProcedure
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la récupération du patient par téléphone {Telephone}", telephone);
+                throw;
+            }
+        }
+
+        // Méthode pour récupérer patient par UserId
+        public async Task<Patient> GetByUserIdAsync(Guid userId)
+        {
+            try
+            {
+                using var conn = _connection.CreateConnection();
+                return await conn.QueryFirstOrDefaultAsync<Patient>(
+                    "sp_GetPatientByUserId",
+                    new { UserId = userId },
+                    commandType: CommandType.StoredProcedure
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la récupération du patient par UserId {UserId}", userId);
+                throw;
+            }
+        }
+
+        // Trouver patient inactif par email
+        public async Task<Patient> FindInactivePatientByEmailAsync(string email)
+        {
+            try
+            {
+                using var conn = _connection.CreateConnection();
+                return await conn.QueryFirstOrDefaultAsync<Patient>(
+                    "sp_FindInactivePatientByEmail",
+                    new { Email = email },
+                    commandType: CommandType.StoredProcedure
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la recherche du patient inactif par email {Email}", email);
+                throw;
+            }
+        }
+
+        // Trouver patient inactif par téléphone
+        public async Task<Patient> FindInactivePatientByTelephoneAsync(string telephone)
+        {
+            try
+            {
+                using var conn = _connection.CreateConnection();
+                return await conn.QueryFirstOrDefaultAsync<Patient>(
+                    "sp_FindInactivePatientByTelephone",
+                    new { Telephone = telephone },
+                    commandType: CommandType.StoredProcedure
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la recherche du patient inactif par téléphone {Telephone}", telephone);
+                throw;
+            }
+        }
+
+        // Trouver patient inactif par UserId
+        public async Task<Patient> FindInactivePatientByUserIdAsync(Guid userId)
+        {
+            try
+            {
+                using var conn = _connection.CreateConnection();
+                return await conn.QueryFirstOrDefaultAsync<Patient>(
+                    "sp_FindInactivePatientByUserId",
+                    new { UserId = userId },
+                    commandType: CommandType.StoredProcedure
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la recherche du patient inactif par UserId {UserId}", userId);
+                throw;
+            }
+        }
+
+        // Trouver patient inactif par numéro d'assurance
+        public async Task<Patient> FindInactivePatientByNumeroAssuranceAsync(string numeroAssurance)
+        {
+            try
+            {
+                using var conn = _connection.CreateConnection();
+                return await conn.QueryFirstOrDefaultAsync<Patient>(
+                    "sp_FindInactivePatientByNumeroAssurance",
+                    new { NumeroAssurance = numeroAssurance },
+                    commandType: CommandType.StoredProcedure
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la recherche du patient inactif par numéro d'assurance {NumeroAssurance}", numeroAssurance);
+                throw;
+            }
+        }
+
+        // Trouver patient inactif par nom complet
+        public async Task<Patient> FindInactivePatientByNomCompletAsync(string nom, string prenom)
+        {
+            try
+            {
+                using var conn = _connection.CreateConnection();
+                return await conn.QueryFirstOrDefaultAsync<Patient>(
+                    "sp_FindInactivePatientByNomComplet",
+                    new { Nom = nom, Prenom = prenom },
+                    commandType: CommandType.StoredProcedure
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la recherche du patient inactif par nom complet {Nom} {Prenom}", nom, prenom);
+                throw;
+            }
+        }
+
+        // Créer demande de réactivation
+        public async Task<Guid> CreateDemandeReactivationAsync(Guid patientId, string emailDemandeur, string motifDemande = null)
+        {
+            try
+            {
+                using var conn = _connection.CreateConnection();
+                var token = Guid.NewGuid().ToString("N"); // Token de vérification
+
+                var demandeId = await conn.QuerySingleAsync<Guid>(
+                    "sp_CreateDemandeReactivation",
+                    new
+                    {
+                        PatientId = patientId,
+                        EmailDemandeur = emailDemandeur,
+                        MotifDemande = motifDemande,
+                        TokenVerification = token
+                    },
+                    commandType: CommandType.StoredProcedure
+                );
+
+                return demandeId;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la création de la demande de réactivation pour le patient {PatientId}", patientId);
+                throw;
+            }
+        }
+
+        // Confirmer réactivation par token
+        public async Task<bool> ConfirmReactivationByTokenAsync(string token)
+        {
+            try
+            {
+                using var conn = _connection.CreateConnection();
+                var result = await conn.QuerySingleAsync<dynamic>(
+                    "sp_ConfirmReactivationByToken",
+                    new { Token = token },
+                    commandType: CommandType.StoredProcedure
+                );
+
+                return result.Success == 1;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la confirmation de réactivation par token");
+                throw;
+            }
+        }
+
     }
 }

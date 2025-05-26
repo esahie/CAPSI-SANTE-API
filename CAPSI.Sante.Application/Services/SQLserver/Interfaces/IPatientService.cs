@@ -22,6 +22,23 @@ namespace CAPSI.Sante.Application.Services.SQLserver.Interfaces
         Task<ApiResponse<bool>> DeactivatePatientAsync(Guid id);
         Task<ApiResponse<bool>> ReactivatePatientAsync(Guid id);
         Task<ApiResponse<List<Patient>>> GetPatientsAsync(string searchTerm = null, int page = 1, int pageSize = 10, bool includeInactive = false);
+        
+        // Nouvelles méthodes pour la gestion des photos
+        Task<ApiResponse<bool>> UpdatePatientPhotoAsync(UpdatePatientPhotoDto dto);
+        Task<ApiResponse<bool>> DeletePatientPhotoAsync(Guid patientId);
+        Task<ApiResponse<string>> GetPatientPhotoAsync(Guid patientId);
+
+        // Nouvelles méthodes pour réactivation
+        Task<ApiResponse<string>> RequestReactivationAsync(string email, string motifDemande = null);
+        Task<ApiResponse<Patient>> ConfirmReactivationAsync(string token); 
+
+        // MÉTHODES DE RECHERCHE PATIENTS INACTIFS - AJOUTEZ CES LIGNES
+        Task<ApiResponse<Patient>> FindInactivePatientByEmailAsync(string email);
+        Task<ApiResponse<Patient>> FindInactivePatientByTelephoneAsync(string telephone);
+        Task<ApiResponse<Patient>> FindInactivePatientByNumeroAssuranceAsync(string numeroAssurance);
+        Task<ApiResponse<Patient>> FindInactivePatientByUserIdAsync(Guid userId);
+        Task<ApiResponse<Patient>> FindInactivePatientByNomCompletAsync(string nom, string prenom);
+
 
     }
 }

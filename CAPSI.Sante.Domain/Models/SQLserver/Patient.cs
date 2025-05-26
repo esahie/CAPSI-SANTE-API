@@ -20,10 +20,22 @@ namespace CAPSI.Sante.Domain.Models.SQLserver
         public string CodePostal { get; set; }
         public string Ville { get; set; }
         public string GroupeSanguin { get; set; }
+
+        // Nouvelle propriété pour la photo
+        public string PhotoUrl { get; set; }
+
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
         public Guid? UserId { get; set; }
         public bool EstActif { get; set; } = true;
+
+        // Navigation property
         public DossierMedical DossierMedical { get; set; }
+
+        // Propriétés calculées pour l'interface utilisateur
+        public string NomComplet => $"{Prenom} {Nom}";
+        public int Age => DateTime.Today.Year - DateNaissance.Year -
+                         (DateTime.Today.DayOfYear < DateNaissance.DayOfYear ? 1 : 0);
+        public bool APhoto => !string.IsNullOrEmpty(PhotoUrl);
     }
 }

@@ -48,6 +48,10 @@ namespace CAPSI.Sante.Application.DTOs.Patient
         [RegularExpression("^(A|B|AB|O)[+-]$")]
         public string GroupeSanguin { get; set; }
 
+        [StringLength(500)]
+        [Url(ErrorMessage = "L'URL de la photo n'est pas valide")]
+        public string? PhotoUrl { get; set; }
+
         public Guid? UserId { get; set; }
     }
 }

@@ -33,6 +33,8 @@ using CAPSI.Sante.Application.Services.PostegreSQL;
 using CAPSI.Sante.Application.Repositories.SQLserver.Interfaces;
 using CAPSI.Sante.Application.Repositories.PostegreSQL.Interfaces;
 using Microsoft.AspNetCore.Http.Features;
+using CAPSI.Sante.API.Services;
+using CAPSI.Sante.Application.Services;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
@@ -239,12 +241,25 @@ builder.Services.AddScoped<IMedecinService>(sp => {
 
 builder.Services.AddScoped<IServiceMedicalService, ServiceMedicalService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<IPatientService, PatientService>();
 
 builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
 
+builder.Services.AddScoped<IEmailService, EmailService>();
 // Services d'authentification
 builder.Services.AddScoped<IAuthService, AuthService>();
+
+
+
+
+// Configuration pour IIS (si déployé sur IIS)
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 10 * 1024 * 1024; // 10 MB
+});
+
+
 
 // Configuration de FluentValidation
 builder.Services.AddFluentValidationAutoValidation()
@@ -310,13 +325,92 @@ builder.Services.Configure<FormOptions>(options =>
 {
     // Augmenter la limite pour les fichiers upload (par défaut est 128 MB)
     options.MultipartBodyLengthLimit = 10 * 1024 * 1024; // 10 MB
+    options.ValueLengthLimit = 10 * 1024 * 1024; // 10 MB
+    options.MultipartHeadersLengthLimit = 16384; // 16 KB
 });
 
 
 // IMPORTANT: Build l'application APRÈS toutes les configurations de services
 var app = builder.Build();
 
-app.UseStaticFiles(); // Pour servir les fichiers statiques depuis wwwroot
+// Ajoutez ce code de debug pour vérifier les chemins
+Log.Information("ContentRootPath: {ContentRootPath}", app.Environment.ContentRootPath);
+//Log.Information("WebRootPath: {WebRootPath}", webRootPath);
+Log.Information("Environment: {Environment}", app.Environment.EnvironmentName);
+//app.UseStaticFiles(); // Pour servir les fichiers statiques depuis wwwroot
+// Configuration avancée des fichiers statiques
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        // Cache des images pour 30 jours
+        if (ctx.File.Name.EndsWith(".jpg") || ctx.File.Name.EndsWith(".jpeg") ||
+            ctx.File.Name.EndsWith(".png") || ctx.File.Name.EndsWith(".gif"))
+        {
+            ctx.Context.Response.Headers.Append("Cache-Control", "public,max-age=2592000"); // 30 jours
+        }
+    }
+});
+
+// Middleware pour sécuriser l'accès aux fichiers (optionnel)
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/uploads"))
+    {
+        // Vérifier l'authentification pour les fichiers sensibles
+        if (!context.User.Identity.IsAuthenticated &&
+            context.Request.Path.StartsWithSegments("/uploads/patients"))
+        {
+            context.Response.StatusCode = 401;
+            return;
+        }
+
+        // Ajouter des headers de sécurité
+        context.Response.Headers.Add("X-Content-Type-Options", "nosniff");
+        context.Response.Headers.Add("X-Frame-Options", "DENY");
+    }
+
+    await next();
+});
+
+// Créer les dossiers nécessaires au démarrage
+var webRootPath = app.Environment.WebRootPath;
+
+// Si WebRootPath est null, l'initialiser
+if (string.IsNullOrEmpty(webRootPath))
+{
+    webRootPath = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+
+    // Créer le dossier wwwroot s'il n'existe pas
+    if (!Directory.Exists(webRootPath))
+    {
+        Directory.CreateDirectory(webRootPath);
+    }
+}
+
+var uploadDirectories = new[]
+{
+    Path.Combine(webRootPath, "uploads"),
+    Path.Combine(webRootPath, "uploads", "medecins"),
+    Path.Combine(webRootPath, "uploads", "patients"),
+    Path.Combine(webRootPath, "uploads", "documents"),
+    Path.Combine(webRootPath, "uploads", "temp")
+};
+
+foreach (var directory in uploadDirectories)
+{
+    if (!Directory.Exists(directory))
+    {
+        Directory.CreateDirectory(directory);
+
+        // Créer un fichier .gitkeep pour conserver le dossier dans git
+        var gitkeepPath = Path.Combine(directory, ".gitkeep");
+        if (!File.Exists(gitkeepPath))
+        {
+            await File.WriteAllTextAsync(gitkeepPath, "");
+        }
+    }
+}
 
 // Ajouter le mappage du hub SignalR
 app.MapHub<NotificationsHub>("/hubs/notifications");

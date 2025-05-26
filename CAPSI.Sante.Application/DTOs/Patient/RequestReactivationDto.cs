@@ -7,11 +7,13 @@ using System.Threading.Tasks;
 
 namespace CAPSI.Sante.Application.DTOs.Patient
 {
-    public class UpdatePatientDto : CreatePatientDto
+    public class RequestReactivationDto
     {
         [Required]
-        public Guid Id { get; set; }
+        [EmailAddress]
+        public string Email { get; set; }
 
-         
+        [StringLength(500)]
+        public string MotifDemande { get; set; }
     }
 }
