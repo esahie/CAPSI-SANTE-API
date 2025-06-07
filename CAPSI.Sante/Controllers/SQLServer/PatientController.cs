@@ -20,16 +20,42 @@ namespace CAPSI.Sante.API.Controllers.SQLServer
             _logger = logger;
         }
 
+        
         [HttpPost]
         [ProducesResponseType(typeof(ApiResponse<Patient>), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(ApiResponse<Patient>), StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<ApiResponse<Patient>>> CreatePatient([FromBody] CreatePatientDto dto)
         {
-            var response = await _patientService.CreatePatientAsync(dto);
-            if (!response.Success)
-                return BadRequest(response);
 
-            return CreatedAtAction(nameof(GetPatient), new { id = response.Data.Id }, response);
+            _logger.LogInformation("Tentative de création de patient avec données : {@dto}", dto);
+
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState
+                    .Where(e => e.Value?.Errors?.Count > 0)
+                    .Select(e => new { Field = e.Key, Errors = e.Value.Errors.Select(er => er.ErrorMessage) });
+
+                _logger.LogWarning("Échec de validation du modèle : {@Errors}", errors);
+                return BadRequest(ModelState);
+            }
+
+            try
+            {
+                var response = await _patientService.CreatePatientAsync(dto);
+                if (!response.Success)
+                {
+                    _logger.LogWarning("Échec de création : {Message} | Erreurs : {@Errors}", response.Message, response.Errors);
+                    return BadRequest(response);
+                }
+
+                _logger.LogInformation("Patient créé avec succès : {@Patient}", response.Data);
+                return CreatedAtAction(nameof(GetPatient), new { id = response.Data.Id }, response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la création du patient");
+                return StatusCode(500, new { success = false, message = "Erreur interne du serveur" });
+            }
         }
 
         [HttpGet("{id}")]
@@ -228,6 +254,19 @@ namespace CAPSI.Sante.API.Controllers.SQLServer
             }
         }
 
+        [HttpPost("with-photo")]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> CreatePatientWithPhoto([FromForm] CreatePatientWithPhotoDto dto)
+        {
+            _logger.LogInformation("Création patient avec photo : {Nom} {Prenom}", dto.Nom, dto.Prenom);
+
+            var response = await _patientService.CreatePatientWithPhotoAsync(dto);
+
+            if (!response.Success)
+                return BadRequest(response);
+
+            return CreatedAtAction(nameof(GetPatient), new { id = response.Data.Id }, response);
+        }
 
 
     }

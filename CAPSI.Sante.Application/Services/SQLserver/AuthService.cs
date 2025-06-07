@@ -103,6 +103,7 @@ namespace CAPSI.Sante.Application.Services.SQLserver
         new Claim(JwtRegisteredClaimNames.Sub, user.Email ?? ""),
         new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         new Claim(ClaimTypes.Role, user.UserType ?? ""),
+        new Claim(ClaimTypes.NameIdentifier, user.Email ?? "")
     };
 
             // Ajouter l'ID utilisateur seulement s'il n'est pas null ou vide

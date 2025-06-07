@@ -246,40 +246,6 @@ namespace CAPSI.Sante.API.Controllers.SQLServer
             };
         }
 
-        //[HttpGet("{id}/photo")]
-        //[ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
-        //[ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
-        //public async Task<IActionResult> GetPhoto(Guid id)
-        //{
-        //    try
-        //    {
-        //        // Utiliser le service pour récupérer les informations de la photo
-        //        var response = await _medecinService.GetPhotoInfoAsync(id);
-
-        //        if (!response.Success)
-        //        {
-        //            return NotFound(new ApiResponse<string>
-        //            {
-        //                Success = false,
-        //                Message = response.Message
-        //            });
-        //        }
-
-        //        // Lire le fichier et le retourner
-        //        var fileInfo = response.Data;
-        //        var fileBytes = System.IO.File.ReadAllBytes(fileInfo.FilePath);
-
-        //        return File(fileBytes, fileInfo.ContentType ?? "image/jpeg");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex, "Erreur lors de la récupération de la photo du médecin {MedecinId}", id);
-        //        return StatusCode(500, new ApiResponse<string>
-        //        {
-        //            Success = false,
-        //            Message = "Une erreur est survenue lors de la récupération de la photo"
-        //        });
-        //    }
-        //}
+        
     }
 }

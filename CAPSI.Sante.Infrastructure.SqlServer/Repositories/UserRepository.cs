@@ -25,11 +25,7 @@ namespace CAPSI.Sante.Infrastructure.SqlServer.Repositories
             _connection = connection;
             _logger = logger;
         }
-
-        //private IDbConnection CreateConnection()
-        //{
-        //    return new SqlConnection(_connection.GetConnectionString("SqlServerConnection"));
-        //}
+ 
 
         public async Task<User> GetByIdAsync(Guid id)
         {

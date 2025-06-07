@@ -121,6 +121,19 @@ namespace CAPSI.Sante.API.Controllers.SQLServer
             {
                 var email = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 model.Email = email; // Sécurité supplémentaire
+
+                _logger.LogInformation("Token reçu - utilisateur identifié : {Email}", email ?? "NULL");
+
+                if (string.IsNullOrEmpty(email))
+                {
+                    _logger.LogWarning("Le token JWT n’a pas fourni d’identifiant utilisateur (ClaimTypes.NameIdentifier)");
+                    return Unauthorized(new BooleanResponse
+                    {
+                        Success = false,
+                        Message = "Utilisateur non authentifié"
+                    });
+                }
+
                 var response = await _authService.ChangePasswordAsync(model);
 
                 var booleanResponse = new BooleanResponse

@@ -1,4 +1,4 @@
-using CAPSI.Sante.API.Hubs;
+Ôªøusing CAPSI.Sante.API.Hubs;
 using CAPSI.Sante.API.Middleware;
 using FluentValidation;
 using FluentValidation.AspNetCore;
@@ -35,6 +35,7 @@ using CAPSI.Sante.Application.Repositories.PostegreSQL.Interfaces;
 using Microsoft.AspNetCore.Http.Features;
 using CAPSI.Sante.API.Services;
 using CAPSI.Sante.Application.Services;
+using System.Security.Claims;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
@@ -62,7 +63,7 @@ builder.Host.UseSerilog();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// Configuration de Swagger avec configuration pour Èviter les conflits de noms
+// Configuration de Swagger avec configuration pour √©viter les conflits de noms
 
 builder.Services.AddSwaggerGen(c =>
 {
@@ -70,7 +71,7 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "CAPSI.Sante API",
         Version = "v1",
-        Description = "API RESTful pour la gestion des rendez-vous mÈdicaux",
+        Description = "API RESTful pour la gestion des rendez-vous m√©dicaux",
         Contact = new OpenApiContact
         {
             Name = "Support Team",
@@ -78,10 +79,10 @@ builder.Services.AddSwaggerGen(c =>
         }
     });
 
-    // Cette configuration devrait rÈsoudre tous les problËmes de types gÈnÈriques
+    // Cette configuration devrait r√©soudre tous les probl√®mes de types g√©n√©riques
     c.CustomSchemaIds(type => SwaggerSchemaHelper.GetCustomSchemaId(type));
 
-    // Ajouter la sÈcuritÈ JWT
+    // Ajouter la s√©curit√© JWT
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "JWT Authorization header using the Bearer scheme",
@@ -103,12 +104,12 @@ builder.Services.AddSwaggerGen(c =>
             Array.Empty<string>()
         }
     });
-  
-    // Ajout d'une mÈthode pour dÈsactiver les validations de schÈma
+
+    // Ajout d'une m√©thode pour d√©sactiver les validations de sch√©ma
     c.SchemaFilter<SchemaFilter>();
 });
- 
-// CrÈation directe des connexions sans utiliser l'interface IDatabaseConnection
+
+// Cr√©ation directe des connexions sans utiliser l'interface IDatabaseConnection
 builder.Services.AddScoped(sp => {
     var configuration = sp.GetRequiredService<IConfiguration>();
     var connectionString = configuration.GetConnectionString("SqlServerConnection");
@@ -121,7 +122,7 @@ builder.Services.AddScoped(sp => {
     return new PostgresConnection(connectionString);
 });
 
-// Enregistrement des repositories avec leurs connexions concrËtes
+// Enregistrement des repositories avec leurs connexions concr√®tes
 builder.Services.AddScoped<IPatientRepository>(sp =>
 {
     var logger = sp.GetRequiredService<ILogger<PatientRepository>>();
@@ -182,7 +183,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<CreatePrescriptionDtoValida
 // Enregistrement du DatabaseSelector pour le code futur
 builder.Services.AddScoped<IDatabaseSelector>(sp =>
 {
-    // CrÈer le sÈlecteur avec les services rÈcupÈrÈs directement
+    // Cr√©er le s√©lecteur avec les services r√©cup√©r√©s directement
     var sqlConnection = sp.GetRequiredService<SqlServerConnection>();
     var postgresConnection = sp.GetRequiredService<PostgresConnection>();
 
@@ -192,13 +193,13 @@ builder.Services.AddScoped<IDatabaseSelector>(sp =>
     );
 });
 
-// Ajouter SignalR pour les communications en temps rÈel
+// Ajouter SignalR pour les communications en temps r√©el
 builder.Services.AddSignalR();
 
-// Configuration de Firestore (DonnÈes temps rÈel)
+// Configuration de Firestore (Donn√©es temps r√©el)
 builder.Services.Configure<FirestoreSettings>(builder.Configuration.GetSection("Firestore"));
 
-// Enregistrement du FirestoreDb avant les services qui en dÈpendent
+// Enregistrement du FirestoreDb avant les services qui en d√©pendent
 builder.Services.AddSingleton(sp => {
     var configuration = sp.GetRequiredService<IConfiguration>();
     return new FirestoreDbBuilder
@@ -214,7 +215,7 @@ builder.Services.AddSingleton<DisponibiliteService>();
 builder.Services.AddSingleton<MessageService>();
 builder.Services.AddSingleton<FirestoreNotificationService>();
 
-// Services mÈtier
+// Services m√©tier
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 
 builder.Services.AddScoped<IMedecinService>(sp => {
@@ -234,7 +235,7 @@ builder.Services.AddScoped<IMedecinService>(sp => {
         medecinRepository,
         firestoreDb,
         serviceMedicalRepository
-    // Supprimez ce paramËtre
+    // Supprimez ce param√®tre
     // sqlConnection
     );
 });
@@ -253,10 +254,22 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 
 
 
-// Configuration pour IIS (si dÈployÈ sur IIS)
+
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.Limits.MaxRequestBodySize = 10 * 1024 * 1024; // 10 MB
+
+    // ‚úÖ Ajouter support HTTP pour le d√©veloppement mobile
+    if (builder.Environment.IsDevelopment())
+    {
+        // HTTP sur port 7068 pour mobile
+        options.Listen(System.Net.IPAddress.Any, 7068);
+        // HTTPS sur port 7069 pour web
+        options.Listen(System.Net.IPAddress.Any, 7069, listenOptions =>
+        {
+            listenOptions.UseHttps();
+        });
+    }
 });
 
 
@@ -282,20 +295,47 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(
                 Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
         };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnAuthenticationFailed = context =>
+            {
+                Console.WriteLine($"Auth √©chou√©e : {context.Exception.Message}");
+                return Task.CompletedTask;
+            },
+            OnTokenValidated = context =>
+            {
+                var identity = context.Principal.Identity as ClaimsIdentity;
+                var email = identity.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                Console.WriteLine($"Token valid√© - Email : {email}");
+                return Task.CompletedTask;
+            }
+        };
     });
 
 // CORS
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowSpecificOrigins",
         builder =>
         {
-            builder.WithOrigins("http://localhost:3000") // Frontend URL
-                   .AllowAnyMethod()
-                   .AllowAnyHeader()
-                   .AllowCredentials();
+            builder.WithOrigins(
+                "http://localhost:3000",      // Web App React
+                "https://localhost:7069",     // HTTPS local
+                "http://localhost:7068",      // HTTP local (Swagger)
+                "http://localhost:8081",      // Expo Web
+                "http://10.0.2.2:8081",      // √âmulateur Android via Expo
+                "exp://127.0.0.1:8081",      // Expo Go
+                "exp://10.0.2.2:8081"        // Expo Go Android
+            )
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials();
         });
 });
+
+
 
 // Rate Limiting
 builder.Services.AddRateLimiter(options =>
@@ -316,29 +356,29 @@ builder.Services.AddRateLimiter(options =>
         context.HttpContext.Response.StatusCode = 429; // Too Many Requests
         await context.HttpContext.Response.WriteAsJsonAsync(new
         {
-            error = "Trop de requÍtes. Veuillez rÈessayer plus tard."
+            error = "Trop de requ√™tes. Veuillez r√©essayer plus tard."
         }, token);
     };
 });
 
 builder.Services.Configure<FormOptions>(options =>
 {
-    // Augmenter la limite pour les fichiers upload (par dÈfaut est 128 MB)
+    // Augmenter la limite pour les fichiers upload (par d√©faut est 128 MB)
     options.MultipartBodyLengthLimit = 10 * 1024 * 1024; // 10 MB
     options.ValueLengthLimit = 10 * 1024 * 1024; // 10 MB
     options.MultipartHeadersLengthLimit = 16384; // 16 KB
 });
 
 
-// IMPORTANT: Build l'application APR»S toutes les configurations de services
+// IMPORTANT: Build l'application APR√àS toutes les configurations de services
 var app = builder.Build();
 
-// Ajoutez ce code de debug pour vÈrifier les chemins
+// Ajoutez ce code de debug pour v√©rifier les chemins
 Log.Information("ContentRootPath: {ContentRootPath}", app.Environment.ContentRootPath);
 //Log.Information("WebRootPath: {WebRootPath}", webRootPath);
 Log.Information("Environment: {Environment}", app.Environment.EnvironmentName);
 //app.UseStaticFiles(); // Pour servir les fichiers statiques depuis wwwroot
-// Configuration avancÈe des fichiers statiques
+// Configuration avanc√©e des fichiers statiques
 app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = ctx =>
@@ -352,12 +392,12 @@ app.UseStaticFiles(new StaticFileOptions
     }
 });
 
-// Middleware pour sÈcuriser l'accËs aux fichiers (optionnel)
+// Middleware pour s√©curiser l'acc√®s aux fichiers (optionnel)
 app.Use(async (context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/uploads"))
     {
-        // VÈrifier l'authentification pour les fichiers sensibles
+        // V√©rifier l'authentification pour les fichiers sensibles
         if (!context.User.Identity.IsAuthenticated &&
             context.Request.Path.StartsWithSegments("/uploads/patients"))
         {
@@ -365,7 +405,7 @@ app.Use(async (context, next) =>
             return;
         }
 
-        // Ajouter des headers de sÈcuritÈ
+        // Ajouter des headers de s√©curit√©
         context.Response.Headers.Add("X-Content-Type-Options", "nosniff");
         context.Response.Headers.Add("X-Frame-Options", "DENY");
     }
@@ -373,7 +413,14 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// CrÈer les dossiers nÈcessaires au dÈmarrage
+app.Use(async (context, next) =>
+{
+    var auth = context.Request.Headers["Authorization"].ToString();
+    Console.WriteLine("[SWAGGER DEBUG] Authorization header = " + auth);
+    await next();
+});
+
+// Cr√©er les dossiers n√©cessaires au d√©marrage
 var webRootPath = app.Environment.WebRootPath;
 
 // Si WebRootPath est null, l'initialiser
@@ -381,7 +428,7 @@ if (string.IsNullOrEmpty(webRootPath))
 {
     webRootPath = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
 
-    // CrÈer le dossier wwwroot s'il n'existe pas
+    // Cr√©er le dossier wwwroot s'il n'existe pas
     if (!Directory.Exists(webRootPath))
     {
         Directory.CreateDirectory(webRootPath);
@@ -403,7 +450,7 @@ foreach (var directory in uploadDirectories)
     {
         Directory.CreateDirectory(directory);
 
-        // CrÈer un fichier .gitkeep pour conserver le dossier dans git
+        // Cr√©er un fichier .gitkeep pour conserver le dossier dans git
         var gitkeepPath = Path.Combine(directory, ".gitkeep");
         if (!File.Exists(gitkeepPath))
         {

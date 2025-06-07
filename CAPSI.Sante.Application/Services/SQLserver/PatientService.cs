@@ -28,6 +28,7 @@ namespace CAPSI.Sante.Application.Services.SQLserver
             _emailService = emailService;
         }
 
+
         public async Task<ApiResponse<Patient>> CreatePatientAsync(CreatePatientDto dto)
         {
             try
@@ -1124,6 +1125,63 @@ namespace CAPSI.Sante.Application.Services.SQLserver
                 };
             }
         }
+
+        public async Task<ApiResponse<Patient>> CreatePatientWithPhotoAsync(CreatePatientWithPhotoDto dto)
+        {
+            try
+            {
+                // Vérifier format image
+                var allowedTypes = new[] { "image/jpeg", "image/png", "image/gif" };
+                if (!allowedTypes.Contains(dto.Photo.ContentType.ToLower()))
+                {
+                    return new ApiResponse<Patient> { Success = false, Message = "Type de fichier non autorisé" };
+                }
+
+                // Sauvegarde physique
+                var fileName = $"{Guid.NewGuid()}{Path.GetExtension(dto.Photo.FileName)}";
+                var folderPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "patients");
+                Directory.CreateDirectory(folderPath);
+                var filePath = Path.Combine(folderPath, fileName);
+
+                using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await dto.Photo.CopyToAsync(stream);
+                }
+
+                var photoUrl = $"/uploads/patients/{fileName}";
+
+                // Construire CreatePatientDto
+                var createDto = new CreatePatientDto
+                {
+                    NumeroAssuranceMaladie = dto.NumeroAssuranceMaladie,
+                    Nom = dto.Nom,
+                    Prenom = dto.Prenom,
+                    DateNaissance = dto.DateNaissance,
+                    Sexe = dto.Sexe,
+                    Telephone = dto.Telephone,
+                    Email = dto.Email,
+                    Adresse = dto.Adresse,
+                    CodePostal = dto.CodePostal,
+                    Ville = dto.Ville,
+                    GroupeSanguin = dto.GroupeSanguin,
+                    UserId = dto.UserId,
+                    PhotoUrl = photoUrl,
+                    PhotoNom = dto.Photo.FileName,
+                    PhotoType = dto.Photo.ContentType,
+                    PhotoTaille = dto.Photo.Length
+                };
+
+                return await CreatePatientAsync(createDto);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la création d'un patient avec photo");
+                return new ApiResponse<Patient> { Success = false, Message = "Erreur interne serveur" };
+            }
+        }
+
+
+
     }
 
 }

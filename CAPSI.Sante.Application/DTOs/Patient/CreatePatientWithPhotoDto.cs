@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.AspNetCore.Http;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
@@ -7,56 +8,42 @@ using System.Threading.Tasks;
 
 namespace CAPSI.Sante.Application.DTOs.Patient
 {
-    public class CreatePatientDto
+    public class CreatePatientWithPhotoDto
     {
         [Required]
-        [StringLength(50)]
-        public string? NumeroAssuranceMaladie { get; set; }
+        public string NumeroAssuranceMaladie { get; set; }
 
         [Required]
-        [StringLength(100)]
-        public string? Nom { get; set; }
+        public string Nom { get; set; }
 
         [Required]
-        [StringLength(100)]
-        public string? Prenom { get; set; }
+        public string Prenom { get; set; }
 
         [Required]
         public DateTime DateNaissance { get; set; }
 
         [Required]
-        [StringLength(1)]
         [RegularExpression("^[MF]$")]
         public string? Sexe { get; set; }
 
-        [Phone]
         public string? Telephone { get; set; }
-
-        [EmailAddress]
         public string? Email { get; set; }
-
-        [StringLength(255)]
         public string? Adresse { get; set; }
-
-        [StringLength(10)]
         public string? CodePostal { get; set; }
-
-        [StringLength(100)]
         public string? Ville { get; set; }
 
-        [StringLength(5)]
         [RegularExpression("^(A|B|AB|O)[+-]$")]
         public string? GroupeSanguin { get; set; }
 
-        [StringLength(500)]
-        [Url(ErrorMessage = "L'URL de la photo n'est pas valide")]
-        public string? PhotoUrl { get; set; }
-
         public Guid? UserId { get; set; }
+
+        [Required]
+        public IFormFile? Photo { get; set; }
 
         public string? PhotoNom { get; set; }
         public string? PhotoType { get; set; }
         public long? PhotoTaille { get; set; }
 
     }
+
 }

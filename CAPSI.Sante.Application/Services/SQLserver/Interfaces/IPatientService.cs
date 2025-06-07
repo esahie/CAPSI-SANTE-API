@@ -39,6 +39,6 @@ namespace CAPSI.Sante.Application.Services.SQLserver.Interfaces
         Task<ApiResponse<Patient>> FindInactivePatientByUserIdAsync(Guid userId);
         Task<ApiResponse<Patient>> FindInactivePatientByNomCompletAsync(string nom, string prenom);
 
-
+        Task<ApiResponse<Patient>> CreatePatientWithPhotoAsync(CreatePatientWithPhotoDto dto);
     }
 }
