@@ -86,3 +86,7 @@ secrets.json
 # Clés Firebase/Google
 firebase-adminsdk-*.json
 google-services.json
+# Node and frontend
+**/node_modules/
+**/dist/
+**/.expo/
